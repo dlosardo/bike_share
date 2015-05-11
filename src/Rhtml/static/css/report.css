@@ -1,0 +1,160 @@
+body {
+  background-color: #eee;
+  font-family: 'Cambria', 'Georgia', serif;
+  font-size: 13px;
+  line-height: 18px;
+  background-color: #eee;
+  color: #222;
+}
+
+h1, h2, h3, h4, h5, h1 code, h2 code {
+  font-weight: normal;
+  font-family: 'Cambria', 'Georgia', serif;
+  text-decoration: none;
+}
+h1, h1 code {
+  font-size: 24px;
+  color: #222;
+}
+h1 {
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 4px;
+  margin-bottom: 1em;
+}
+h2, h2 code {
+  font-size: 18px;
+  color: #666;
+}
+h2 {
+  border-bottom: 1px dashed #ccc;
+  padding-bottom: 2px;
+  margin-bottom: 1em;
+}
+h3 code {
+  font-size: 15px;
+  color: #888;
+}
+
+h3 {
+  font-size: 15px;
+  border-bottom: 1px dashed #ccc;
+  color:#3c48a5;
+  text-align: center;
+}
+
+h4 {
+  color:blue;
+  text-indent: 50px;
+}
+
+h5 {
+  color:darkblue;
+  text-indent: 75px;
+}
+
+h6 {
+  color:darkorange;
+  text-indent: 90px;
+}
+
+h1 a, h1 a:visited, h1 a:hover, a:active,
+h2 a, h2 a:visited, h2 a:hover, a:active,
+h3 a, h3 a:visited, h3 a:hover, a:active,
+h4 a, h4 a:visited, h4 a:hover, a:active {
+  text-decoration: inherit;
+  color: inherit;
+}
+
+.latex {
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+}
+.report {
+  background-color: white;
+  width: 70em;
+  padding: 1em;
+  margin-top: 2em;
+  margin-left: auto;
+  margin-right: auto;
+  border: 1px solid #ccc;
+  box-shadow: 2px 2px 3px #aaa;
+}
+
+.report .header {
+    margin-bottom: 2em;
+}
+.report .title {
+  font-size: 28px;
+  color: black;
+  text-align: center;
+  text-decoration: underline;
+  margin-bottom: 0.5em;
+}
+.report .subTitle {
+  font-size: 24px;
+  color: black;
+  text-align: center;
+  margin-bottom: 0.5em;
+}
+.report .author {
+  font-size: 18px;
+  text-align: center;
+  text-decoration: underline;
+}
+.report .date {
+  text-align: center;
+  color: #999;
+}
+
+.report h1 {
+  cursor: hand;
+}
+
+#static_assets {
+  display: none;
+}
+
+/* R output */
+
+/* Chunks */
+.report .chunk {
+  overflow: hidden;
+}
+.report .chunk:hover {
+  overflow: visible;
+}
+
+/* Knitr Messages */
+.warning, .error {
+  width: 50em;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  border: 1px solid;
+  padding:15px 15px 15px 15px;
+  background-repeat: no-repeat;
+  background-position: 10px center;
+}
+.warning pre, .error pre {
+  margin-left: 40px;
+}
+
+.report .leftcol {
+    float: left;
+    width: 33%;
+}
+.report .middlecol {
+    float: left;
+    width: 33%;
+}
+.report .rightcol {
+    float: left;
+    width: 33%;
+}
+
+/* Charts */
+svg {
+  height: auto !important;
+}

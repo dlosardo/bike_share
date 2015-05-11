@@ -1,0 +1,245 @@
+<div class="report">
+
+
+
+
+
+
+
+<div class="chunk" id="static_assets"><div class="rcode"><div class="output"><pre class="knitr r"><link rel='stylesheet' type='text/css' href='static/css/reset.css'>
+</pre></div>
+<div class="output"><pre class="knitr r"><link rel='stylesheet' type='text/css' href='static/css/table.css'>
+</pre></div>
+<div class="output"><pre class="knitr r"><link rel='stylesheet' type='text/css' href='static/css/report.css'>
+</pre></div>
+<div class="output"><pre class="knitr r"><script type='text/javascript' src='static/js/jquery-1.10.1.min.js'></script>
+</pre></div>
+<div class="output"><pre class="knitr r"><script type='text/javascript' src='static/js/jquery-ui.js'></script>
+</pre></div>
+<div class="output"><pre class="knitr r"><script type='text/javascript' src='http://latex.codecogs.com/latexit.js'></script>
+</pre></div>
+</div></div>
+
+
+
+
+
+
+
+<div class="header">
+  <div class="title">Bike Share Data</div>
+  <div class="subTitle">Machine Learning Project</div>
+  <div class="author">Diane Losardo</div>
+  <div class="date">Report Created: <code class="knitr inline">Mon May 11, 2015 12:08:19</code></div>
+</div>
+<p> This report describes the implemention of applying machine learning algorithms using the Bike Sharing Demand data <a href="https://www.kaggle.com/c/bike-sharing-demand">Bike Sharing Demand</a> data. First, descriptive statistics and relevant visualizations are provided to get a sense of the data in an exploratory fashion. Next, several machine learning algorithms are implemented and the models are evaluated using fit statistics, a cross-validation procedure, and exmaining the predicted values.
+<br><br><br>
+</p>
+<p><b> Click on the headers below to reveal information about that topic.</b><br><br>
+</p>
+<br><br>
+<h1> Description of Problem </h1>
+<div id = "project_intro">
+<p> The goal of this project is to predict bicycle usage from the Washington DC bike share program using various variables related to weather, time of year, and user type. The outcome of interest is a count of the number of bicycle rentals per hour starting from <b><code class="knitr inline">2011-01-01</code></b> to <b><code class="knitr inline">2012-12-19 23:00:00</code></b>. However, for each month, the dataset only contains information on the first 19 days. For example, the data for January 2011 look like:
+</p>
+<div class="chunk" id="jan_plot"><div class="rimage default"><img src="figure/jan_plot-1.png" title="plot of chunk jan_plot" alt="plot of chunk jan_plot" class="plot" /></div></div>
+<p>
+The idea is to predict the number of bicycle rentals (i.e., the target) for the remaining days of the month only given information from the other timepoints. 
+</p>
+<p>
+The features (e.g., predictor variables) available are as follows:</br>
+<ul>
+<li> Categorical Variables </li>
+  <ul>
+  <li> season: spring, summer, fall, winter </li>
+  <li> holiday: whether the day is considered a holiday or not </li>
+  <li> workingday: whether the day is neither a weekend nor a holiday </li>
+  <li> weather: 1: Clear, Few clouds, Partly cloudy, Partly cloudy, 2: Mist + Cloudy, Mist + Broken clouds, Mist + Few clouds, Mist, 3: Light Snow, Light Rain + Thunderstorm + Scattered clouds, Light Rain + Scattered clouds, 4: Heavy Rain + Ice Pallets + Thunderstorm + Mist, Snow + Fog)
+  </ul>
+<li> Quantitative Variables </li>
+  <ul> 
+  <li> temperature in Celsius </li>
+  <li> "feels like" temperature in Celsius </li>
+  <li> relative humidity </li>
+  <li> wind speed </li>
+  <li> number of casual users (i.e., non-registered user rentals initiated) </li>
+  <li> number of registered user rentals initiated </li>
+  </ul>
+</ul>
+</p>
+<p> The approach taken is to fit a model that is complicated enough such that the difference between the predicted values and actual values is small, but general enough such that the model will be able to accurately predict future observations. More specifically, if we consider the general model:
+<br><br>
+<div class="latex", lang="latex">
+  \begin{align*}
+  Y &= f(X) + \epsilon
+  \end{align*}
+</div>
+<br><br>
+where Y is a vector of the outcome values (bicycle rental counts), X is a matrix containing the values of all the features in the model, and epsilon is a vector of measurement errors, then we are trying to find a function f that takes as input the features and predicts the Y values as closely as possible, while not overfitting to the particularities of the sample data so that the predictions are general enough to predict future observations. This is often called the bias-variance tradeoff, with more complicated models tending to have larger variance and less bias. Bias can be thought of as accuracy and variance thought of as stability. We want a model that is accurate but also stable enough so that future observations can be optimally predicted.
+<br><br>
+</div><!-- end project intro-->
+<h1> Descriptives </h2>
+<div id = "descriptives">
+<p> Before choosing a set of models to fit to the data, let's examine the distributions of the features and the target. From the descriptives table (click on 'summary statistics') and the empirical distributions (click on 'emprical distributions'), it is clear that the outcome is a count and thus using a probability distribution for a count variable, such as a Poisson distribution or Negative Binomial distribution, might be a viable option.  </p><br><br>
+<p> Another consideration is which features to use in the model, a problem known as feature selection. We want to select the features that are most influential in predicting the target for our final model. Given the nature of time inherent in the data, I constructed a few extra features that might be influential predictors: month of year (1 to 12), day of week (1 to 7), and hour of day (1 to 24). From the correlations (click on 'correlations'), it appears that 'feels like' temperature, temperature, humidity, hour, and month are linearly related to count. The correlations also reveal that temperature and feels like temperature are highly correlated, which can lead to problems with multicollinearity when implementing certain regression models. Thus, it might be wise to run the models with both features and with just one feature and see if model fit increases substantially or not.
+</p>
+<h3> Summary Statistics </h3>
+<div id = "summary_stats">
+<div class="chunk" id="summary_stats"><div class="rcode"><div class="output"><pre class="knitr r"><!-- html table generated in R 3.1.2 by xtable 1.7-4 package -->
+<!-- Mon May 11 12:08:19 2015 -->
+<table border=1>
+<caption align="top"> Overall Descriptives </caption>
+<tr> <th>  </th> <th> n </th> <th> mean </th> <th> sd </th> <th> median </th> <th> min </th> <th> max </th> <th> skew </th> <th> kurtosis </th> <th> se </th>  </tr>
+  <tr> <td align="right"> season </td> <td align="right"> 10886 </td> <td align="right"> 2.51 </td> <td align="right"> 1.12 </td> <td align="right"> 3.00 </td> <td align="right"> 1.00 </td> <td align="right"> 4.00 </td> <td align="right"> -0.01 </td> <td align="right"> -1.36 </td> <td align="right"> 0.01 </td> </tr>
+  <tr> <td align="right"> holiday </td> <td align="right"> 10886 </td> <td align="right"> 0.03 </td> <td align="right"> 0.17 </td> <td align="right"> 0.00 </td> <td align="right"> 0.00 </td> <td align="right"> 1.00 </td> <td align="right"> 5.66 </td> <td align="right"> 30.03 </td> <td align="right"> 0.00 </td> </tr>
+  <tr> <td align="right"> workingday </td> <td align="right"> 10886 </td> <td align="right"> 0.68 </td> <td align="right"> 0.47 </td> <td align="right"> 1.00 </td> <td align="right"> 0.00 </td> <td align="right"> 1.00 </td> <td align="right"> -0.78 </td> <td align="right"> -1.40 </td> <td align="right"> 0.00 </td> </tr>
+  <tr> <td align="right"> weather </td> <td align="right"> 10886 </td> <td align="right"> 1.42 </td> <td align="right"> 0.63 </td> <td align="right"> 1.00 </td> <td align="right"> 1.00 </td> <td align="right"> 4.00 </td> <td align="right"> 1.24 </td> <td align="right"> 0.39 </td> <td align="right"> 0.01 </td> </tr>
+  <tr> <td align="right"> temp </td> <td align="right"> 10886 </td> <td align="right"> 20.23 </td> <td align="right"> 7.79 </td> <td align="right"> 20.50 </td> <td align="right"> 0.82 </td> <td align="right"> 41.00 </td> <td align="right"> 0.00 </td> <td align="right"> -0.92 </td> <td align="right"> 0.07 </td> </tr>
+  <tr> <td align="right"> atemp </td> <td align="right"> 10886 </td> <td align="right"> 23.66 </td> <td align="right"> 8.47 </td> <td align="right"> 24.24 </td> <td align="right"> 0.76 </td> <td align="right"> 45.45 </td> <td align="right"> -0.10 </td> <td align="right"> -0.85 </td> <td align="right"> 0.08 </td> </tr>
+  <tr> <td align="right"> humidity </td> <td align="right"> 10886 </td> <td align="right"> 61.89 </td> <td align="right"> 19.25 </td> <td align="right"> 62.00 </td> <td align="right"> 0.00 </td> <td align="right"> 100.00 </td> <td align="right"> -0.09 </td> <td align="right"> -0.76 </td> <td align="right"> 0.18 </td> </tr>
+  <tr> <td align="right"> windspeed </td> <td align="right"> 10886 </td> <td align="right"> 12.80 </td> <td align="right"> 8.16 </td> <td align="right"> 13.00 </td> <td align="right"> 0.00 </td> <td align="right"> 57.00 </td> <td align="right"> 0.59 </td> <td align="right"> 0.63 </td> <td align="right"> 0.08 </td> </tr>
+  <tr> <td align="right"> casual </td> <td align="right"> 10886 </td> <td align="right"> 36.02 </td> <td align="right"> 49.96 </td> <td align="right"> 17.00 </td> <td align="right"> 0.00 </td> <td align="right"> 367.00 </td> <td align="right"> 2.50 </td> <td align="right"> 7.55 </td> <td align="right"> 0.48 </td> </tr>
+  <tr> <td align="right"> registered </td> <td align="right"> 10886 </td> <td align="right"> 155.55 </td> <td align="right"> 151.04 </td> <td align="right"> 118.00 </td> <td align="right"> 0.00 </td> <td align="right"> 886.00 </td> <td align="right"> 1.52 </td> <td align="right"> 2.62 </td> <td align="right"> 1.45 </td> </tr>
+  <tr> <td align="right"> count </td> <td align="right"> 10886 </td> <td align="right"> 191.57 </td> <td align="right"> 181.14 </td> <td align="right"> 145.00 </td> <td align="right"> 1.00 </td> <td align="right"> 977.00 </td> <td align="right"> 1.24 </td> <td align="right"> 1.30 </td> <td align="right"> 1.74 </td> </tr>
+   </table>
+</pre></div>
+</div></div>
+</div><!--end summary stats-->
+
+<h3> Empirical Distributions </h3>
+<div id = "empirical_dist">
+<div class="chunk" id="empirical_dist"><div class="rimage default"><img src="figure/empirical_dist-1.png" title="plot of chunk empirical_dist" alt="plot of chunk empirical_dist" class="plot" /></div></div>
+</div><!-- end empirical dist-->
+
+<h3> Time Series Plots </h3>
+<div id = "time_series"> 
+<div class="chunk" id="time_series"><div class="rimage default"><img src="figure/time_series-1.png" title="plot of chunk time_series" alt="plot of chunk time_series" class="plot" /></div></div>
+</div> <!--end time_series -->
+
+<h3> Correlations </h3>
+<div id = "correlations">
+<div class="chunk" id="corr_plot"><div class="rimage default"><img src="figure/corr_plot-1.png" title="plot of chunk corr_plot" alt="plot of chunk corr_plot" class="plot" /></div><div class="rimage default"><img src="figure/corr_plot-2.png" title="plot of chunk corr_plot" alt="plot of chunk corr_plot" class="plot" /></div></div>
+</div> <!-- end correlations-->
+</div> <!-- end descriptives tables-->
+
+<h1> Exploratory Plots </h1>
+<div id = "descriptives_plots">
+<p>
+The exploratory plots delve deeper into the data and try to construct an idea of how the counts are changing over time. One interesting point is that season does not appear to be as related as one might expect; in particular, Spring is the season with the fewest amount of bicycle rentals. However, upon examinging the times series plot for season, it is clear that a reason for this is that the Bike Share program began in the Spring, and it is likely that it was not as popular when it first started. Thus, as more people realized the program exists, more people rented bicycles, and the beginning Spring months continue to bring down the overall Spring average. It might be a good idea to then not use season as a feature in the final model, or at least see how the predictions are with and without season. 
+</p><br>
+<p>
+It is also interesting to see exactly how month and hour of day are related to rental counts, which the histograms under those sections make clear. I was also surprised that day of week does not appear to have much variability across days, at least before controlling for any other variables.
+</p>
+<p>
+I was also interested to see how certain features were behaving differently for days when the bicycle rental count was high, medium, and low. Thus, I divided the sample based on quantiles and plots four of the features by quantile. From this plot it is clear to see that, as temperature increases, humidity decreases, and windspeed increases the count of bicycle rentals also increases. However, it is interesting to note that the maximal rental gains in temperature occur from the 2nd to 3rd quantile while the maximal gains for windspeed occur from the 1st to 2nd quantile; furthermore, humidity has a more stable rental gain across quantiles.
+</p>
+<h3> Overall Time Series</h3>
+<div id = "overall_plots">
+<div class="chunk" id="overall_plots"><div class="rimage default"><img src="figure/overall_plots-1.png" title="plot of chunk overall_plots" alt="plot of chunk overall_plots" class="plot" /></div></div>
+</div><!--end overall_plots-->
+
+<h3> By Month </h3>
+<div id = "plots_by_month">
+<div class="chunk" id="plots_by_month"><div class="rimage default"><img src="figure/plots_by_month-1.png" title="plot of chunk plots_by_month" alt="plot of chunk plots_by_month" class="plot" /></div><div class="rimage default"><img src="figure/plots_by_month-2.png" title="plot of chunk plots_by_month" alt="plot of chunk plots_by_month" class="plot" /></div></div>
+</div><!--end plots_by_month-->
+
+<h3> By Day of Week </h3>
+<div id="plots_day_of_week">
+<div class="chunk" id="day_of_week"><div class="rimage default"><img src="figure/day_of_week-1.png" title="plot of chunk day_of_week" alt="plot of chunk day_of_week" class="plot" /></div><div class="rimage default"><img src="figure/day_of_week-2.png" title="plot of chunk day_of_week" alt="plot of chunk day_of_week" class="plot" /></div></div>
+</div><!--end plots_day_of_week-->
+<h3> Hour of Day </h3>
+<div id = "plots_hour_of_day">
+<div class="chunk" id="hour_of_day"><div class="rimage default"><img src="figure/hour_of_day-1.png" title="plot of chunk hour_of_day" alt="plot of chunk hour_of_day" class="plot" /></div></div>
+</div><!--end plots_hour_of_day-->
+
+<h3> By Season </h3>
+<div id = "by_season">
+<div class="chunk" id="by_season"><div class="rimage default"><img src="figure/by_season-1.png" title="plot of chunk by_season" alt="plot of chunk by_season" class="plot" /></div><div class="rimage default"><img src="figure/by_season-2.png" title="plot of chunk by_season" alt="plot of chunk by_season" class="plot" /></div></div>
+</div><!--end by_season-->
+<h3> By Quantile </h3>
+<div id = "by_quantile">
+<div class="chunk" id="by_quantile"><div class="rimage default"><img src="figure/by_quantile-1.png" title="plot of chunk by_quantile" alt="plot of chunk by_quantile" class="plot" /></div></div>
+</div><!--end by_quantile-->
+</div><!--end descriptives_plots-->
+
+<h1> Model Comparison </h1>
+<div id="model_comparison">
+<p> To obtain the most optimal predictions of bicycle counts, I considered several different models. The first is a multiple linear regression model. This model has the property of often having low bias but large variance. I next implemented Ridge Regression, which uses regularization in the form of imposing a penalty on the regression coefficents to prevent overfitting. Specifically, the coefficents are shrunk toward zero and themselves. This helps with the problem of multicollinearity, where the features are highly correlated with each other. In this case, it is clear that temperature (temp) and 'feels like' temperature (atemp) are highly correlated. I next considered a Lasso regression model, which is similar to Ridge regression in that it also applies a shrinkage method. I next considered a Random Forest Regression model, which uses decision trees and bagging procedures to obtain predicted values. I finally a Poisson Regression model, which has the nice feature that the predicted values will necessarily be above zero.
+</p><br>
+
+<b>Feature Processing</b> Before fitting the models, I standardized the quantitive variables, i.e., temperature, feels like temperatue, humidity, and windspeed. To inform feature selection, I considered the exploratory results above and also looked at various model fit metrics, such as the R^2 value for the regression models. I tested models with and without features and arrived at an optimal set of features for each model.
+
+<br><br>
+<p><b> Cross validation. </b> In order to provide a measure of how well the model predictions are performing on yet unseen sample data, I implemented a cross-validation method. First, I randomly divided the training sample data itself into two subsample: a training subsample (70%) and a testing subsample (30%). I fitted several models to the training subsample and then computed a cross-validation score using the model and the testing subsample. This will serve to help understanding how well the model predictions are generalizing to future data.
+</p>
+<br><br>
+<b> Results. </b>
+<div class="chunk" id="model_comparison"><div class="rimage default"><img src="figure/model_comparison-1.png" title="plot of chunk model_comparison" alt="plot of chunk model_comparison" class="plot" /></div></div>
+<p>
+The RMSE values in this plot are from the results of calculating the RMSE of the predicted counts vs. the actual counts for the cross-validation samples. The clear winner here is the Random Forest Regression, with the lowest RMSE, meaning the predicted values from the training subsample are closest to the actual values from the testing subsample.
+</p>
+<div class="chunk" id="results"><div class="rcode"><div class="output"><pre class="knitr r"><!-- html table generated in R 3.1.2 by xtable 1.7-4 package -->
+<!-- Mon May 11 12:10:10 2015 -->
+<table border=1>
+<caption align="top"> Descriptives of Predicted Values by Model </caption>
+<tr> <th> model </th> <th> mean_count </th> <th> sd_count </th> <th> min_count </th> <th> max_count </th> <th> median_count </th>  </tr>
+  <tr> <td> Poisson </td> <td align="right"> 189.54 </td> <td align="right"> 110.63 </td> <td align="right"> 31.08 </td> <td align="right"> 628.87 </td> <td align="right"> 158.33 </td> </tr>
+  <tr> <td> Linear Regression </td> <td align="right"> 191.96 </td> <td align="right"> 104.40 </td> <td align="right"> -92.37 </td> <td align="right"> 437.95 </td> <td align="right"> 191.32 </td> </tr>
+  <tr> <td> Ridge Regression </td> <td align="right"> 192.21 </td> <td align="right"> 104.31 </td> <td align="right"> -95.05 </td> <td align="right"> 437.35 </td> <td align="right"> 192.31 </td> </tr>
+  <tr> <td> Lasso Regression </td> <td align="right"> 192.00 </td> <td align="right"> 103.22 </td> <td align="right"> -83.89 </td> <td align="right"> 435.64 </td> <td align="right"> 191.10 </td> </tr>
+  <tr> <td> Random Forest Regression </td> <td align="right"> 193.93 </td> <td align="right"> 166.93 </td> <td align="right"> 1.38 </td> <td align="right"> 884.18 </td> <td align="right"> 160.44 </td> </tr>
+   </table>
+</pre></div>
+</div><div class="rimage default"><img src="figure/results-1.png" title="plot of chunk results" alt="plot of chunk results" class="plot" /></div></div>
+<p>
+The descriptives table and predicted values plot above describe the predicted counts obtained for the fitted models. As excepted, the Poisson predicated values fall in the expected range - meaning, there are no negative predicated values. The random forest predicated values also are in the expecgted range. The others, however, have some values that are below zero, which in practice should be classified as zero as a negative count doesn't exist. Another interesting result is that the random forest predicted counts have the largest variability, which may be a reason they generalize to future counts so well. The median value is also lowest for the Poisson model and Random Forest Model.
+</p>
+<br><br>
+</div><!-- end model_comparison-->
+
+<h1> Discussion </h1>
+<div id = "discussion">
+<p> The predictions I chose were from the Random Forest regression model. This was based on the cross-validiation RMSE score being by far the lowest, the predicted values falling into the expected range, and the good amount of variability in the predicted values. However, there are many other models I could have considered, and my tuning of the models could have been even more revised and precise. Still, this model seems to serve as a useful predictor of bicycle rental counts for the Washington DC Bike Share program. 
+</p> <br>
+<p>
+In the future it would be interesting to explore the possibility of using other link functions besides Poisson in the generalized linear modeling framework, such as a Negative Binomial link function. Also, it would be interesting to approach this model from a time series perspective. There is certainly a trend that can be taken out (the growth over time due to the Bike Share program becoming more popular that will most likely stabilize) and the remaining variability can be decomposed. Thus, it might be interesting to see if a model that interpolates the 'missing' data and takes into account the time series would be useful, such as an ARIMA model.
+</p><br>
+<p>
+Another addition I would add is to conduct a more rigorous modesl selection algorithm with multiple fit index comparisons and a more complete cross-validation examination. Extra fit indices I would consider are information based ones that can be compared across models, such as the AIC and BIC. These attempt to control for model complexity and allow for a more direct comparison of different models. For cross-validation, I would randomly sample training and testing datasets many more times and take an average of the RMSE for a series of models. This would minimize the error found from just completing one random sample and obtaining one RMSE.
+</p><br>
+<p>
+One final thought is that an interesting procedure might be to use the data for casual users separately from registered users. Thus, develop two models to predict the these two types of users separately and the final count can be the sum of the two. This would help to alleviate prediction errors that might occur by grouping together users who behave differently.
+</p>
+</div><!-- end discussion-->
+
+</div><!--end report-->
+<script>
+$(document).ready(function() {
+  $('.report h1').click(function() {
+    $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+  $('.report h2').click(function() {
+    $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+  $('.report h3').click(function() {
+    $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+  $('.report h4').click(function() {
+    $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+  $('.report h5').click(function() {
+    $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+  $('.report h6').click(function() {
+  $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+});     
+
+</script>
+

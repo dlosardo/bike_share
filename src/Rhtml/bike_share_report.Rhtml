@@ -1,0 +1,413 @@
+<div class="report">
+
+<!--begin.rcode echo=F, message=F
+knitr::opts_chunk$set(comment=NA, echo=F, results='markup', tidy=F, message=F);
+end.rcode-->
+
+<!--begin.rcode warning=F
+# current wd is set to src/Rhtml
+setwd("../../")
+source('src/R/cdroot.R')
+source('src/R/includes.R')
+end.rcode-->
+
+<!--begin.rcode load_rcode
+cdroot()
+source('src/R/nvl.R')
+source('src/R/html.R')
+source('src/R/tables.R')
+source('src/R/plots.R')
+end.rcode-->
+
+<!--begin.rcode static_assets
+cat(css('reset.css'))
+cat(css('table.css'))
+cat(css('report.css'))
+
+cat(js('jquery-1.10.1.min.js'))
+cat(js('jquery-ui.js'))
+cat(js_web('http://latex.codecogs.com/latexit.js'))
+end.rcode-->
+
+<!--begin.rcode constants
+DATE_VARS <- c("datetime", "day", "week", "month", "year", "weekday", "timestamp", "clock_time", "hour_of_day", "month_char")
+MODEL_NAMES <- c("poisson", "lr", "ridge", "lasso", "rf")
+end.rcode-->
+
+<!--begin.rcode local_functions
+create_factors <- function(dat){
+  dat$season <- factor(dat$season, levels = c(1, 2, 3, 4)
+                       , labels = c("spring", "summer", "fall", "winter"))
+  dat$weather <- factor(dat$weather, levels = c(1, 2, 3, 4)
+                        , labels = c("clear|cloudy", "misty", "light rain", "heavy rain"))
+  dat$holiday <- factor(dat$holiday, levels = c(0, 1)
+                        , labels = c("Not Holiday", "Holiday"))
+  dat$workingday <- factor(dat$workingday, levels = c(0, 1)
+                           , labels = c("Not Working Day", "Working Day"))
+  return(dat)
+}
+set_date_variables <- function(dat){
+  dat$day <- as.Date(dat$datetime)
+  dat$week = round_date(dat$day, "week")
+  dat$month = round_date(dat$day, "month")
+  dat$year = round_date(dat$day, "year")
+  dat$weekday = weekdays(dat$day)
+  dat$timestamp <- strptime(dat$datetime, format='%Y-%m-%d %H:%M:%S')
+  dat$timestamp <- as.POSIXct(dat$timestamp)
+  dat$clock_time <- format(dat$timestamp, '%H:%M:%S')
+  dat$hour_of_day <- format(dat$timestamp, '%H')
+  dat$month_char <- factor(as.character(dat$month), levels = as.character(sort(unique(dat$month)))
+                           , labels = sprintf("%s %s", month(sort(unique(dat$month)), label=TRUE)
+                           , year(sort(unique(dat$month)))))
+  return(dat)
+}
+get_predicted_values <- function(model_names, test_dat){
+  predicted_values_list <- sapply(model_names, function(model_name) read.csv(sprintf("data/output/%s_predict.csv", model_name)
+                                                    , stringsAsFactors=F, header=F))
+  for (model_name in model_names){
+    test_dat[[sprintf("%s_count", model_name)]] <- predicted_values_list[[sprintf("%s.V1", model_name)]]
+  }
+  test_dat <- set_date_variables(test_dat)
+  test_dat <- test_dat[order(test_dat$timestamp), ]
+  return(test_dat)
+}
+mean_rounded = function(x, n){round(mean(x), n)}
+sd_rounded = function(x, n){round(sd(x), n)}
+end.rcode-->
+
+<!--begin.rcode read_data
+cdroot()
+input_file <- "data/input/train.csv"
+dat <- read.csv(input_file, stringsAsFactors=F)
+dat <- set_date_variables(dat)
+dat_factors <- create_factors(dat)
+all_hours <- data.frame(timestamp = seq(min(dat$timestamp), max(dat$timestamp), by="hours"))
+all_hours <- data.frame(timestamp = all_hours[order(all_hours$timestamp), ])
+dat <- dat[order(dat$timestamp), ]
+dat_all <- merge(dat, all_hours, by="timestamp", all = T)
+first_month <- dat_all[grepl("2011-01", as.character(dat_all$timestamp)),]
+dat$data_type <- "train"
+test_dat <- read.csv("data/input/test.csv", stringsAsFactors=F)
+test_dat$data_type <- "test"
+test_dat <- get_predicted_values(MODEL_NAMES, test_dat)
+end.rcode-->
+
+<div class="header">
+  <div class="title">Bike Share Data</div>
+  <div class="subTitle">Machine Learning Project</div>
+  <div class="author">Diane Losardo</div>
+  <div class="date">Report Created: <!--rinline format(Sys.time(), '%a %b %d, %Y %H:%M:%S')--></div>
+</div>
+<p> This report describes the implemention of applying machine learning algorithms using the Bike Sharing Demand data <a href="https://www.kaggle.com/c/bike-sharing-demand">Bike Sharing Demand</a> data. First, descriptive statistics and relevant visualizations are provided to get a sense of the data in an exploratory fashion. Next, several machine learning algorithms are implemented and the models are evaluated using fit statistics, a cross-validation procedure, and exmaining the predicted values.
+<br><br><br>
+</p>
+<p><b> Click on the headers below to reveal information about that topic.</b><br><br>
+</p>
+<br><br>
+<h1> Description of Problem </h1>
+<div id = "project_intro">
+<p> The goal of this project is to predict bicycle usage from the Washington DC bike share program using various variables related to weather, time of year, and user type. The outcome of interest is a count of the number of bicycle rentals per hour starting from <b><!--rinline min(dat$timestamp)--></b> to <b><!--rinline max(dat$timestamp)--></b>. However, for each month, the dataset only contains information on the first 19 days. For example, the data for January 2011 look like:
+</p>
+<!--begin rcode jan_plot, fig.width=12, warning=FALSE, fig.height=4
+ggplot(first_month, aes(x=timestamp, y=count, group=1)) + geom_line(color="#3c48a5") +
+  ylab("Number of Bicycle Rentals") + xlab("Time")
+end.rcode-->
+<p>
+The idea is to predict the number of bicycle rentals (i.e., the target) for the remaining days of the month only given information from the other timepoints. 
+</p>
+<p>
+The features (e.g., predictor variables) available are as follows:</br>
+<ul>
+<li> Categorical Variables </li>
+  <ul>
+  <li> season: spring, summer, fall, winter </li>
+  <li> holiday: whether the day is considered a holiday or not </li>
+  <li> workingday: whether the day is neither a weekend nor a holiday </li>
+  <li> weather: 1: Clear, Few clouds, Partly cloudy, Partly cloudy, 2: Mist + Cloudy, Mist + Broken clouds, Mist + Few clouds, Mist, 3: Light Snow, Light Rain + Thunderstorm + Scattered clouds, Light Rain + Scattered clouds, 4: Heavy Rain + Ice Pallets + Thunderstorm + Mist, Snow + Fog)
+  </ul>
+<li> Quantitative Variables </li>
+  <ul> 
+  <li> temperature in Celsius </li>
+  <li> "feels like" temperature in Celsius </li>
+  <li> relative humidity </li>
+  <li> wind speed </li>
+  <li> number of casual users (i.e., non-registered user rentals initiated) </li>
+  <li> number of registered user rentals initiated </li>
+  </ul>
+</ul>
+</p>
+<p> The approach taken is to fit a model that is complicated enough such that the difference between the predicted values and actual values is small, but general enough such that the model will be able to accurately predict future observations. More specifically, if we consider the general model:
+<br><br>
+<div class="latex", lang="latex">
+  \begin{align*}
+  Y &= f(X) + \epsilon
+  \end{align*}
+</div>
+<br><br>
+where Y is a vector of the outcome values (bicycle rental counts), X is a matrix containing the values of all the features in the model, and epsilon is a vector of measurement errors, then we are trying to find a function f that takes as input the features and predicts the Y values as closely as possible, while not overfitting to the particularities of the sample data so that the predictions are general enough to predict future observations. This is often called the bias-variance tradeoff, with more complicated models tending to have larger variance and less bias. Bias can be thought of as accuracy and variance thought of as stability. We want a model that is accurate but also stable enough so that future observations can be optimally predicted.
+<br><br>
+</div><!-- end project intro-->
+<h1> Descriptives </h2>
+<div id = "descriptives">
+<p> Before choosing a set of models to fit to the data, let's examine the distributions of the features and the target. From the descriptives table (click on 'summary statistics') and the empirical distributions (click on 'emprical distributions'), it is clear that the outcome is a count and thus using a probability distribution for a count variable, such as a Poisson distribution or Negative Binomial distribution, might be a viable option.  </p><br><br>
+<p> Another consideration is which features to use in the model, a problem known as feature selection. We want to select the features that are most influential in predicting the target for our final model. Given the nature of time inherent in the data, I constructed a few extra features that might be influential predictors: month of year (1 to 12), day of week (1 to 7), and hour of day (1 to 24). From the correlations (click on 'correlations'), it appears that 'feels like' temperature, temperature, humidity, hour, and month are linearly related to count. The correlations also reveal that temperature and feels like temperature are highly correlated, which can lead to problems with multicollinearity when implementing certain regression models. Thus, it might be wise to run the models with both features and with just one feature and see if model fit increases substantially or not.
+</p>
+<h3> Summary Statistics </h3>
+<div id = "summary_stats">
+<!--begin.rcode summary_stats, warning=FALSE
+# overall descriptives table
+overall_descriptives_table(dat, c(DATE_VARS, "data_type"))
+end.rcode-->
+</div><!--end summary stats-->
+
+<h3> Empirical Distributions </h3>
+<div id = "empirical_dist">
+<!--begin.rcode empirical_dist, warning=FALSE, fig.width=12
+plot_empirical_distributions(dat, c("season", "holiday", "workingday", "weather", "temp", "atemp", "humidity"
+                                  , "windspeed", "casual", "registered", "count"))
+
+end.rcode-->
+</div><!-- end empirical dist-->
+
+<h3> Time Series Plots </h3>
+<div id = "time_series"> 
+<!--begin.rcode time_series, fig.width=12
+dat_melted <- melt(dat, measure.vars=c("season", "holiday", "workingday", "weather", "temp", "atemp", "humidity"
+                                  , "windspeed", "casual", "registered", "count"))
+ggplot(data=dat_melted, aes(y=value, x=timestamp)) + geom_point() + facet_wrap(~variable, scales="free") +
+  geom_smooth(method="loess", color="orange", size=2) + ggtitle("Time Series of Variables")
+end.rcode--> 
+</div> <!--end time_series -->
+
+<h3> Correlations </h3>
+<div id = "correlations">
+<!--begin.rcode corr_plot, fig.width=12
+tmp <- dat
+tmp$hour_of_day <- as.numeric(tmp$hour_of_day)
+tmp$month <- month(tmp$month)
+tmp$hour <- as.numeric(tmp$hour_of_day)
+tmp$week_day <- wday(tmp$datetime)
+pairs(tmp[order(tmp$timestamp), c("count", "atemp", "temp"
+                                 , "humidity", "windspeed"
+                                 , "holiday", "workingday"
+                                 , "season", "weather")],
+      lower.panel=panel.smooth, upper.panel=panel.cor, main="Outcome (count) and Feature Variable Correlations")
+pairs(tmp[order(tmp$timestamp), c("count", "month"
+                                  , "week_day", "hour")],
+      lower.panel=panel.smooth, upper.panel=panel.cor, main="Outcome (count) and Time Variable Correlations")
+end.rcode-->
+</div> <!-- end correlations-->
+</div> <!-- end descriptives tables-->
+
+<h1> Exploratory Plots </h1>
+<div id = "descriptives_plots">
+<p>
+The exploratory plots delve deeper into the data and try to construct an idea of how the counts are changing over time. One interesting point is that season does not appear to be as related as one might expect; in particular, Spring is the season with the fewest amount of bicycle rentals. However, upon examinging the times series plot for season, it is clear that a reason for this is that the Bike Share program began in the Spring, and it is likely that it was not as popular when it first started. Thus, as more people realized the program exists, more people rented bicycles, and the beginning Spring months continue to bring down the overall Spring average. It might be a good idea to then not use season as a feature in the final model, or at least see how the predictions are with and without season. 
+</p><br>
+<p>
+It is also interesting to see exactly how month and hour of day are related to rental counts, which the histograms under those sections make clear. I was also surprised that day of week does not appear to have much variability across days, at least before controlling for any other variables.
+</p>
+<p>
+I was also interested to see how certain features were behaving differently for days when the bicycle rental count was high, medium, and low. Thus, I divided the sample based on quantiles and plots four of the features by quantile. From this plot it is clear to see that, as temperature increases, humidity decreases, and windspeed increases the count of bicycle rentals also increases. However, it is interesting to note that the maximal rental gains in temperature occur from the 2nd to 3rd quantile while the maximal gains for windspeed occur from the 1st to 2nd quantile; furthermore, humidity has a more stable rental gain across quantiles.
+</p>
+<h3> Overall Time Series</h3>
+<div id = "overall_plots">
+<!--begin.rcode overall_plots, fig.width=12
+ggplot(data=dat_factors) +
+  geom_point(aes(x=datetime, y=count, color=temp)) + 
+  geom_smooth(aes(x=datetime, y=count, group=1), method="loess", color="black", size=2) +
+  xlab(paste0("Time in Hours from ", min(dat_factors$day), " to ", max(dat_factors$day))) +
+  ylab("Number of Bicycles Rented") +
+  scale_colour_gradient2(midpoint=median(dat_factors$temp), low="#5e4fa2", mid="#e6f598", high="#9e0142") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()
+        , legend.position="bottom") +
+  ggtitle("Bicycle Usage Over Time")
+  
+end.rcode-->
+</div><!--end overall_plots-->
+
+<h3> By Month </h3>
+<div id = "plots_by_month">
+<!--begin.rcode plots_by_month, fig.width=12
+counts_by_month <- ddply(dat_factors, .(month), summarize, se = sd(count)/sqrt(length(count)), mean_count = mean(count))
+limits = aes(ymax = mean_count + se, ymin = mean_count - se)
+ggplot(data=counts_by_month, aes(x=month, y=mean_count)) + geom_bar(stat="identity", fill="darkblue") +
+  geom_errorbar(limits, color="darkgreen", size=1.5) +
+  scale_x_date(breaks = sort(counts_by_month$month)
+               , labels = paste0(year(sort(counts_by_month$month)), month(sort(counts_by_month$month), label=T))) +
+  ylab("Average Bicycles Rented") +
+  theme(axis.text.x = element_text(angle=90, size=14)
+        , axis.text.y = element_text(size=14)) +
+  ggtitle("Average Bicycle Usage by Month")
+
+# Time series by month
+ggplot(data=dat_factors, aes(x=datetime, y=count, group=1)) + geom_line() +
+  facet_wrap(~month_char, scales="free_x") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  ggtitle("Time Series of Bicycle Usage by Month")
+
+end.rcode-->
+</div><!--end plots_by_month-->
+
+<h3> By Day of Week </h3>
+<div id="plots_day_of_week">
+<!--begin.rcode day_of_week, fig.width=12
+counts_by_day_of_week <- ddply(dat_factors, .(weekday), summarize, se = sd(count)/sqrt(length(count)), mean_count = mean(count))
+limits = aes(ymax = mean_count + se, ymin = mean_count - se)
+ggplot(data=counts_by_day_of_week, aes(x=weekday, y=mean_count)) + geom_bar(stat="identity", fill="darkblue") +
+  geom_errorbar(limits, color="darkgreen", size=1.5) +
+  scale_x_discrete(limits=c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+                   , labels=c("MON", "TUE", "WED", "THUR", "FRI", "SAT", "SUN")) +
+  ylab("Average Bicycles Rented") +
+  theme(axis.text.x = element_text(angle=90, size=14)
+        , axis.text.y = element_text(size=14)) +
+  ggtitle("Average Bicycle Usage by Weekday")
+
+week_month <- ddply(dat_factors, .(month_char, weekday), summarize, mean_count = mean(count))
+ggplot(data=week_month, aes(x=weekday, y=mean_count, group=1)) + geom_line() + geom_point() +
+  facet_wrap(~month_char, scales="free_x") +
+  scale_x_discrete(limits=c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+                   , labels=c("MON", "TUE", "WED", "THUR", "FRI", "SAT", "SUN")) +
+  ylab("Average Bicycles Rented") +
+  ggtitle("Time Series by Month Across Day of Week")
+end.rcode-->
+</div><!--end plots_day_of_week-->
+<h3> Hour of Day </h3>
+<div id = "plots_hour_of_day">
+<!--begin.rcode hour_of_day, fig.width=12
+counts_by_hour <- ddply(dat_factors, .(hour_of_day), summarize, se = sd(count)/sqrt(length(count)), mean_count = mean(count))
+limits = aes(ymax = mean_count + se, ymin = mean_count - se)
+ggplot(counts_by_hour, aes(x=hour_of_day, y=mean_count)) +
+  geom_histogram(stat="identity", fill="darkblue") +
+  geom_errorbar(limits, color="darkgreen", size=1.5) +
+  xlab("Hour of day (24-hour clock)") +
+  ylab("Average Bicycles Rented")
+end.rcode-->
+</div><!--end plots_hour_of_day-->
+
+<h3> By Season </h3>
+<div id = "by_season">
+<!--begin.rcode by_season
+counts_by_season <- ddply(dat_factors, .(season), summarize, se = sd(count)/sqrt(length(count)), mean_count = mean(count))
+limits = aes(ymax = mean_count + se, ymin = mean_count - se)
+ggplot(counts_by_season, aes(x=season, y=mean_count)) +
+  geom_histogram(stat="identity", fill="darkblue") +
+  geom_errorbar(limits, color="darkgreen", size=1.5) +
+  xlab("Season") +
+  ylab("Average Bicycles Rented")
+ggplot(dat_factors, aes(x=season, y=count)) +
+  geom_boxplot(fill="salmon") + coord_flip()
+end.rcode-->
+</div><!--end by_season-->
+<h3> By Quantile </h3>
+<div id = "by_quantile">
+<!--begin.rcode by_quantile, fig.width=12
+quant_temp <- quantile(dat$count)
+dat$quantile = as.factor(as.numeric(cut(dat$count, quant_temp, include.lowest = TRUE)))
+by_quantile <- ddply(dat, .(quantile), summarize, mean_temp=mean(temp)
+      , mean_atemp=mean(atemp), mean_humidity=mean(humidity)
+      , mean_windspeed=mean(windspeed))
+by_quantile_melted <- melt(by_quantile, measure.vars=c("mean_temp", "mean_atemp"
+                                                       , "mean_humidity"
+                                                       , "mean_windspeed")
+                           , variable.name="means")
+ggplot(data=by_quantile_melted, aes(x=quantile, y=value, group=1)) + geom_line() +
+  geom_point() +
+  facet_wrap(~means, scales="free_y")
+end.rcode-->
+</div><!--end by_quantile-->
+</div><!--end descriptives_plots-->
+
+<h1> Model Comparison </h1>
+<div id="model_comparison">
+<p> To obtain the most optimal predictions of bicycle counts, I considered several different models. The first is a multiple linear regression model. This model has the property of often having low bias but large variance. I next implemented Ridge Regression, which uses regularization in the form of imposing a penalty on the regression coefficents to prevent overfitting. Specifically, the coefficents are shrunk toward zero and themselves. This helps with the problem of multicollinearity, where the features are highly correlated with each other. In this case, it is clear that temperature (temp) and 'feels like' temperature (atemp) are highly correlated. I next considered a Lasso regression model, which is similar to Ridge regression in that it also applies a shrinkage method. I next considered a Random Forest Regression model, which uses decision trees and bagging procedures to obtain predicted values. I finally a Poisson Regression model, which has the nice feature that the predicted values will necessarily be above zero.
+</p><br>
+
+<b>Feature Processing</b> Before fitting the models, I standardized the quantitive variables, i.e., temperature, feels like temperatue, humidity, and windspeed. To inform feature selection, I considered the exploratory results above and also looked at various model fit metrics, such as the R^2 value for the regression models. I tested models with and without features and arrived at an optimal set of features for each model.
+
+<br><br>
+<p><b> Cross validation. </b> In order to provide a measure of how well the model predictions are performing on yet unseen sample data, I implemented a cross-validation method. First, I randomly divided the training sample data itself into two subsample: a training subsample (70%) and a testing subsample (30%). I fitted several models to the training subsample and then computed a cross-validation score using the model and the testing subsample. This will serve to help understanding how well the model predictions are generalizing to future data.
+</p>
+<br><br>
+<b> Results. </b>
+<!--begin.rcode model_comparison, fig.width=12
+#plot the predicted values against each other
+rmses <- data.frame(model_name = c("Poisson", "Linear Regression", "Ridge Regression"
+                                   , "Lasso Regression", "Random Forest Regression")
+                    , RMSE = c(149.46, 147.01, 147.03, 147.06, 66.82))
+ggplot(data=rmses, aes(y = RMSE, x = model_name, color = model_name)) + geom_point(size=10) +
+  ggtitle("RMSE Values From Cross-Validation")
+end.rcode-->
+<p>
+The RMSE values in this plot are from the results of calculating the RMSE of the predicted counts vs. the actual counts for the cross-validation samples. The clear winner here is the Random Forest Regression, with the lowest RMSE, meaning the predicted values from the training subsample are closest to the actual values from the testing subsample.
+</p>
+<!--begin.rcode results, fig.width=12
+test_dat <- plyr::rename(test_dat, c("poisson_count" = "Poisson", "lr_count" = "Linear Regression"
+                                         , "ridge_count" = "Ridge Regression", "lasso_count" = "Lasso Regression"
+                                         , "rf_count" = "Random Forest Regression"))
+test_dat_melted <- melt(test_dat, measure.vars = c("Poisson", "Linear Regression", "Ridge Regression", "Lasso Regression", "Random Forest Regression")
+                        , variable.name="model", value.name="count")
+descriptives_preds <- ddply(test_dat_melted, .(model), summarize, mean_count = mean(count), sd_count = sd(count)
+                , min_count = min(count), max_count = max(count), median_count = median(count))
+htmltable(descriptives_preds, caption="Descriptives of Predicted Values by Model"
+          , caption.placement="top", include.rownames=F)
+ggplot(dat=test_dat_melted, aes(x=datetime, y=count, color=model, group=model)) + geom_line() +
+  facet_wrap(~model) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()
+        , legend.position="bottom") +
+  ylab("Number of Bicycles Rented") +
+  xlab("Time") +
+  ggtitle("Predicted Bicycle Usage Over Time")
+end.rcode-->
+<p>
+The descriptives table and predicted values plot above describe the predicted counts obtained for the fitted models. As excepted, the Poisson predicated values fall in the expected range - meaning, there are no negative predicated values. The random forest predicated values also are in the expecgted range. The others, however, have some values that are below zero, which in practice should be classified as zero as a negative count doesn't exist. Another interesting result is that the random forest predicted counts have the largest variability, which may be a reason they generalize to future counts so well. The median value is also lowest for the Poisson model and Random Forest Model.
+</p>
+<br><br>
+</div><!-- end model_comparison-->
+
+<h1> Discussion </h1>
+<div id = "discussion">
+<p> The predictions I chose were from the Random Forest regression model. This was based on the cross-validiation RMSE score being by far the lowest, the predicted values falling into the expected range, and the good amount of variability in the predicted values. However, there are many other models I could have considered, and my tuning of the models could have been even more revised and precise. Still, this model seems to serve as a useful predictor of bicycle rental counts for the Washington DC Bike Share program. 
+</p> <br>
+<p>
+In the future it would be interesting to explore the possibility of using other link functions besides Poisson in the generalized linear modeling framework, such as a Negative Binomial link function. Also, it would be interesting to approach this model from a time series perspective. There is certainly a trend that can be taken out (the growth over time due to the Bike Share program becoming more popular that will most likely stabilize) and the remaining variability can be decomposed. Thus, it might be interesting to see if a model that interpolates the 'missing' data and takes into account the time series would be useful, such as an ARIMA model.
+</p><br>
+<p>
+Another addition I would add is to conduct a more rigorous modesl selection algorithm with multiple fit index comparisons and a more complete cross-validation examination. Extra fit indices I would consider are information based ones that can be compared across models, such as the AIC and BIC. These attempt to control for model complexity and allow for a more direct comparison of different models. For cross-validation, I would randomly sample training and testing datasets many more times and take an average of the RMSE for a series of models. This would minimize the error found from just completing one random sample and obtaining one RMSE.
+</p><br>
+<p>
+One final thought is that an interesting procedure might be to use the data for casual users separately from registered users. Thus, develop two models to predict the these two types of users separately and the final count can be the sum of the two. This would help to alleviate prediction errors that might occur by grouping together users who behave differently.
+</p>
+</div><!-- end discussion-->
+
+</div><!--end report-->
+<script>
+$(document).ready(function() {
+  $('.report h1').click(function() {
+    $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+  $('.report h2').click(function() {
+    $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+  $('.report h3').click(function() {
+    $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+  $('.report h4').click(function() {
+    $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+  $('.report h5').click(function() {
+    $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+  $('.report h6').click(function() {
+  $(this).next().slideToggle('slow');
+    return false;
+  }).next().hide();
+});     
+
+</script>
+
