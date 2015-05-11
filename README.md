@@ -6,7 +6,7 @@ This project attempts to answer the question posed by the Kaggle Bike Share ques
 Viewing the html Report
 -----------------------
 
-Clone the repo and save all files and directories in `src/Rhtml/` to a place on your machine and open `bike_share_report.html` in a browser (make sure the static folder is in the same directory as the .html file).
+Clone the repo and save all files and directories in `src/Rhtml/` to a place on your machine and open `bike_share_report.html` in a browser (make sure the figure and static folders are in the same directory as the .html file).
 
 The input data can be found in `data/input`
 
