@@ -15,6 +15,9 @@ The input data can be found in `data/input`
 
 The output data (predicted values) can be found in `data/output`
 
+* predicted values for all models
+* `random_forest_counts.csv` contains the random forest regression predicted counts in the proper submission format
+
 Re-Generate html report
 -----------------------
 
